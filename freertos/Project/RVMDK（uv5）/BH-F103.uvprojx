@@ -47,7 +47,7 @@
             <InvalidFlash>1</InvalidFlash>
           </TargetStatus>
           <OutputDirectory>..\..\Output\</OutputDirectory>
-          <OutputName>流水灯</OutputName>
+          <OutputName>freertos</OutputName>
           <CreateExecutable>1</CreateExecutable>
           <CreateLib>0</CreateLib>
           <CreateHexFile>1</CreateHexFile>
@@ -365,7 +365,7 @@
               <MiscControls></MiscControls>
               <Define>STM32F10X_HD, USE_STDPERIPH_DRIVER</Define>
               <Undefine></Undefine>
-              <IncludePath>..\..\Libraries\CMSIS;..\..\User;..\..\Libraries\FWlib\inc;..\..\User\led;..\..\FreeRTOS\include;..\..\FreeRTOS\port\RVDS\ARM_CM3</IncludePath>
+              <IncludePath>..\..\Libraries\CMSIS;..\..\User;..\..\Libraries\FWlib\inc;..\..\FreeRTOS\include;..\..\FreeRTOS\port\RVDS\ARM_CM3</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -584,9 +584,14 @@
               <FilePath>..\..\User\stm32f10x_it.h</FilePath>
             </File>
             <File>
+              <FileName>bsp_usart.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\bsp_usart.c</FilePath>
+            </File>
+            <File>
               <FileName>bsp_led.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\User\Led\bsp_led.c</FilePath>
+              <FilePath>..\..\User\bsp_led.c</FilePath>
             </File>
           </Files>
         </Group>
