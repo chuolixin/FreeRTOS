@@ -70,9 +70,6 @@
 #ifndef FREERTOS_CONFIG_H
 #define FREERTOS_CONFIG_H
 
-#include "stm32f10x.h"
-//#include "bsp_usart.h"
-
 /*-----------------------------------------------------------
  * Application specific definitions.
  *
@@ -126,6 +123,11 @@ priority values, 0 to 15.  This must correspond to the
 configKERNEL_INTERRUPT_PRIORITY setting.  Here 15 corresponds to the lowest
 NVIC value of 255. */
 #define configLIBRARY_KERNEL_INTERRUPT_PRIORITY	15
+#define configTIMER_TASK_STACK_DEPTH (configMINIMAL_STACK_SIZE*2) 
+#define configSUPPORT_STATIC_ALLOCATION 1
+
+#define xPortPendSVHandler PendSV_Handler
+#define vPortSVCHandler SVC_Handler
 
 #endif /* FREERTOS_CONFIG_H */
 
