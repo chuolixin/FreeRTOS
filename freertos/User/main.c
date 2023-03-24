@@ -2,6 +2,7 @@
 #include "task.h"
 #include "bsp_led.h"
 #include "bsp_usart.h"
+#include "bsp_key.h"
 
 /**************************************************************************
 * 函数声明
@@ -22,6 +23,8 @@ static TaskHandle_t AppTaskCreate_Handle;
 static TaskHandle_t LED1_Task_Handle;
 /* LED2 任务句柄 */
 static TaskHandle_t LED2_Task_Handle;
+/* KEY 任务句柄 */
+static TaskHandle_t KEY_Task_Handle;
 
 static void System_Init(void)
 {
@@ -35,6 +38,8 @@ static void System_Init(void)
 	LED_GPIO_Config();
 	/* 串口初始化 */
 	USART_Config();
+	/* 按键初始化 */
+	Key_GPIO_Config();
 }
 
 static void LED1_Task (void* parameter)
@@ -50,7 +55,7 @@ static void LED1_Task (void* parameter)
 	}
 }
 
-static void LED2_Task (void* parameter)
+static void LED2_Task ( void* parameter )
 {
 	while (1)
 	{
@@ -63,13 +68,33 @@ static void LED2_Task (void* parameter)
 	}
 }
 
+static void KEY_Task ( void* parameter )
+{
+	while (1)
+	{
+		if( Key_Scan(KEY1_GPIO_PORT,KEY1_GPIO_PIN) == KEY_ON )
+		{
+			printf("Suspend LED1 LED2\r\n");
+			vTaskSuspend(LED1_Task_Handle);
+			vTaskSuspend(LED2_Task_Handle);
+		}
+		if( Key_Scan(KEY2_GPIO_PORT,KEY2_GPIO_PIN) == KEY_ON )
+		{
+			printf("Resume LED1 LED2\r\n");
+			vTaskResume(LED1_Task_Handle);
+			vTaskResume(LED2_Task_Handle);
+		}
+		vTaskDelay(20);		
+	}
+}
+
 /***********************************************************************
 132 * @ 函数名 ： AppTaskCreate
 133 * @ 功能说明： 为了方便管理，所有的任务创建函数都放在这个函数里面
 134 * @ 参数 ： 无
 135 * @ 返回值 ： 无
 136 ***************************************************************/
-static void AppTaskCreate(void)
+static void AppTaskCreate( void )
 {
 	BaseType_t xReturn = pdPASS;
 
@@ -97,6 +122,18 @@ static void AppTaskCreate(void)
 		printf("LED2_Task 任务创建成功!\n");
 	else
 		printf("LED2_Task 任务创建失败!\n");
+		/* 创建 LED1_Task 任务 */
+	xReturn = xTaskCreate( (TaskFunction_t )KEY_Task, //任务函数
+										(const char*)"KEY_Task",//任务名称
+										(uint16_t)512, //任务堆栈大小
+										(void* )NULL, //传递给任务函数的参数
+										(UBaseType_t)4, //任务优先级
+										(TaskHandle_t*)&KEY_Task_Handle );//任务控制块指针
+
+	if (pdPASS == xReturn) /* 创建成功 */
+		printf("KEY_Task 任务创建成功!\n");
+	else
+		printf("KEY_Task 任务创建失败!\n");
 	vTaskDelete(AppTaskCreate_Handle); //删除 AppTaskCreate 任务
 	taskEXIT_CRITICAL(); //退出临界区
 }
