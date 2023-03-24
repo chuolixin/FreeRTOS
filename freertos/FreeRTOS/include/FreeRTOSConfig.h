@@ -51,7 +51,7 @@ NVIC value of 255. */
 #define configQUEUE_REGISTRY_SIZE 10 				//设置可以注册的信号量和消息队列个数
 #define configUSE_APPLICATION_TASK_TAG 0			//使用跟踪宏?
 #define configSUPPORT_DYNAMIC_ALLOCATION 1 			//支持动态申请
-#define configSUPPORT_STATIC_ALLOCATION 1			//支持静态内存
+#define configSUPPORT_STATIC_ALLOCATION 0			//支持静态内存
 #define configTOTAL_HEAP_SIZE ((size_t)(36*1024)) 	//系统所有总的堆大小
 #define configUSE_MALLOC_FAILED_HOOK 0 				//内存申请失败钩子函数
 #define configCHECK_FOR_STACK_OVERFLOW 0 			//这个宏定义大于 0 时启用堆栈溢出检测功能
