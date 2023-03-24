@@ -7,7 +7,7 @@
 * 函数声明
 ***************************************************************************/
 static void AppTaskCreate(void);/* 用于创建任务 */
-static void LED_Task(void* pvParameters);/* LED_Task 任务实现 */
+static void LED1_Task(void* pvParameters);/* LED1_Task 任务实现 */
 static void System_Init(void);/* 用于初始化板载相关资源 */
 
 /**************************** 任务句柄 ********************************/
@@ -18,8 +18,10 @@ static void System_Init(void);/* 用于初始化板载相关资源 */
 */
 /* 创建任务句柄 */
 static TaskHandle_t AppTaskCreate_Handle;
-/* LED 任务句柄 */
-static TaskHandle_t LED_Task_Handle;
+/* LED1 任务句柄 */
+static TaskHandle_t LED1_Task_Handle;
+/* LED2 任务句柄 */
+static TaskHandle_t LED2_Task_Handle;
 
 static void System_Init(void)
 {
@@ -35,16 +37,29 @@ static void System_Init(void)
 	USART_Config();
 }
 
-static void LED_Task (void* parameter)
+static void LED1_Task (void* parameter)
 {
 	while (1)
 	{
 		LED1_ON;
-		printf("led on\r\n");
+		printf("led 1 on\r\n");
 		vTaskDelay(500); /* 延时 500 个 tick */
 		LED1_OFF;
-		printf("led off\r\n");
+		printf("led 1 off\r\n");
 		vTaskDelay(500);
+	}
+}
+
+static void LED2_Task (void* parameter)
+{
+	while (1)
+	{
+		LED2_ON;
+		printf("led 2 on\r\n");
+		vTaskDelay(100); /* 延时 500 个 tick */
+		LED2_OFF;
+		printf("led 2 off\r\n");
+		vTaskDelay(100);
 	}
 }
 
@@ -59,18 +74,29 @@ static void AppTaskCreate(void)
 	BaseType_t xReturn = pdPASS;
 
 	taskENTER_CRITICAL(); //进入临界区
-	/* 创建 LED_Task 任务 */
-	xReturn = xTaskCreate( (TaskFunction_t )LED_Task, //任务函数
-										(const char*)"LED_Task",//任务名称
+	/* 创建 LED1_Task 任务 */
+	xReturn = xTaskCreate( (TaskFunction_t )LED1_Task, //任务函数
+										(const char*)"LED1_Task",//任务名称
 										(uint16_t)512, //任务堆栈大小
 										(void* )NULL, //传递给任务函数的参数
 										(UBaseType_t)2, //任务优先级
-										(TaskHandle_t*)&LED_Task_Handle );//任务控制块指针
+										(TaskHandle_t*)&LED1_Task_Handle );//任务控制块指针
+	if (pdPASS == xReturn) /* 创建成功 */
+		printf("LED1_Task 任务创建成功!\n");
+	else
+		printf("LED1_Task 任务创建失败!\n");
+	/* 创建 LED1_Task 任务 */
+	xReturn = xTaskCreate( (TaskFunction_t )LED2_Task, //任务函数
+										(const char*)"LED2_Task",//任务名称
+										(uint16_t)512, //任务堆栈大小
+										(void* )NULL, //传递给任务函数的参数
+										(UBaseType_t)3, //任务优先级
+										(TaskHandle_t*)&LED2_Task_Handle );//任务控制块指针
 
 	if (pdPASS == xReturn) /* 创建成功 */
-		printf("LED_Task 任务创建成功!\n");
+		printf("LED2_Task 任务创建成功!\n");
 	else
-		printf("LED_Task 任务创建失败!\n");
+		printf("LED2_Task 任务创建失败!\n");
 	vTaskDelete(AppTaskCreate_Handle); //删除 AppTaskCreate 任务
 	taskEXIT_CRITICAL(); //退出临界区
 }
