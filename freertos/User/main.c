@@ -1,6 +1,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
+ #include "semphr.h"
 
 #include "bsp_led.h"
 #include "bsp_usart.h"
@@ -31,7 +32,10 @@ static TaskHandle_t LED2_Task_Handle;
 static TaskHandle_t Receive_Task_Handle;
 /* 发送 任务句柄 */
 static TaskHandle_t Send_Task_Handle;
-
+/* Take_Task 任务句柄 */
+static TaskHandle_t Take_Task_Handle = NULL;
+/* Give_Task 任务句柄 */
+static TaskHandle_t Give_Task_Handle = NULL;
 /***************************** 内核对象句柄 *****************************/
 /*
 * 信号量，消息队列，事件标志组，软件定时器这些都属于内核的对象，要想使用这些内核FreeRTOS内核实现与应用开发实战指南
@@ -44,6 +48,8 @@ static TaskHandle_t Send_Task_Handle;
 *
 */
 QueueHandle_t Test_Queue =NULL;
+SemaphoreHandle_t BinarySem_Handle =NULL;
+SemaphoreHandle_t CountSem_Handle =NULL;
 
 /*************************** 全局变量声明 *******************************/
 /*
@@ -119,7 +125,7 @@ static void LED2_Task ( void* parameter )
 //		vTaskDelay(20);		
 //	}
 //}
-
+#if 0
 static void Receive_Task(void* parameter)
 {
 	BaseType_t xReturn = pdTRUE;/* 定义一个创建信息返回值，默认为 pdTRUE */
@@ -168,7 +174,109 @@ static void Send_Task(void* parameter)
 		vTaskDelay(20);/* 延时 20 个 tick */
 	}
 }
+#endif
 
+/**********************************************************************
+ * @ 函数名 ：  Receive_Task
+ * @ 功能说明： Receive_Task 任务主体
+ * @ 参数 ：
+ * @ 返回值 ： 无
+ ********************************************************************/
+static void Receive_Task(void* parameter)
+{
+	BaseType_t xReturn = pdPASS;/* 定义一个创建信息返回值，默认为 pdPASS */
+
+	while (1) 
+	{
+		//获取二值信号量 xSemaphore,没获取到则一直等待
+		xReturn = xSemaphoreTake(BinarySem_Handle,/* 二值信号量句柄 */
+								portMAX_DELAY); /* 等待时间 */
+		if (pdTRUE == xReturn)
+			printf("BinarySem_Handle get success!\n\n");
+		LED1_TOGGLE;
+	}
+}
+
+ /**********************************************************************
+ * @ 函数名 ： Send_Task
+ * @ 功能说明： Send_Task 任务主体
+ * @ 参数 ：
+ * @ 返回值 ： 无
+ ********************************************************************/
+static void Send_Task(void* parameter)
+{
+	BaseType_t xReturn = pdPASS;/* 定义一个创建信息返回值，默认为 pdPASS */
+
+	while (1)
+	{
+		/* KEY1 被按下 */
+		if ( Key_Scan( KEY1_GPIO_PORT,KEY1_GPIO_PIN ) == KEY_ON )
+		{
+			xReturn = xSemaphoreGive( BinarySem_Handle );//给出二值信号量
+			if ( xReturn == pdTRUE )
+				printf("Key1 BinarySem_Handle BinarySem Release Success\r\n");
+			else
+				printf("Key1 BinarySem_Handle BinarySem Release Fail\r\n");
+		}
+		/* KEY2 被按下 */
+		if ( Key_Scan( KEY2_GPIO_PORT,KEY2_GPIO_PIN ) == KEY_ON ) 
+		{
+			xReturn = xSemaphoreGive( BinarySem_Handle );//给出二值信号量
+			if ( xReturn == pdTRUE )
+				printf("Key2 BinarySem_Handle BinarySem Release Success!\r\n");
+			else
+				printf("Key2 BinarySem_Handle BinarySem Release Fail\r\n");
+		}
+		vTaskDelay(20);
+	}
+}
+
+static void Take_Task(void* parameter)
+{
+	BaseType_t xReturn = pdTRUE;/* 定义一个创建信息返回值，默认为 pdPASS */
+	/* 任务都是一个无限循环，不能返回 */
+	while (1) 
+	{
+		//如果 KEY1 被按下
+		if ( Key_Scan( KEY1_GPIO_PORT,KEY1_GPIO_PIN ) == KEY_ON )
+		{
+			/* 获取一个计数信号量 */
+			xReturn = xSemaphoreTake(CountSem_Handle, /* 计数信号量句柄 */
+									0); /* 等待时间： 0 */
+			if ( pdTRUE == xReturn )
+				printf( "Key1 Process success stop car bit\n" );
+			else
+				printf( "Key1 Process fail stop car bit\n" );
+		}
+		vTaskDelay(20); //每 20ms 扫描一次
+	}
+}
+
+/**********************************************************************
+* @ 函数名 ： Give_Task
+* @ 功能说明： Give_Task 任务主体
+* @ 参数 ：
+* @ 返回值 ： 无
+********************************************************************/
+static void Give_Task(void* parameter)
+{
+	BaseType_t xReturn = pdTRUE;/* 定义一个创建信息返回值，默认为 pdPASS */
+	/* 任务都是一个无限循环，不能返回 */
+	while (1)
+	{
+		//如果 KEY2 被按下
+		if ( Key_Scan( KEY2_GPIO_PORT,KEY2_GPIO_PIN ) == KEY_ON )
+		{
+			/* 释放一个计数信号量 */
+			xReturn = xSemaphoreGive( CountSem_Handle );//给出计数信号量
+			if ( pdTRUE == xReturn )
+				printf( "Key2 process release stop car bit\n" );
+			else
+				printf( "Key2 process release but no stop car bit\n");
+		}
+		vTaskDelay(20); //每 20ms 扫描一次
+	}
+}
 
 /***********************************************************************
 132 * @ 函数名 ： AppTaskCreate
@@ -186,29 +294,38 @@ static void AppTaskCreate( void )
 								(UBaseType_t) QUEUE_SIZE );/* 消息的大小 */
 	if (NULL != Test_Queue)
 		printf("Create Test_Queue Successful!\r\n");
-	/* 创建 LED1_Task 任务 */
-	xReturn = xTaskCreate( (TaskFunction_t )LED1_Task, //任务函数
-										(const char*)"LED1_Task",//任务名称
-										(uint16_t)512, //任务堆栈大小
-										(void* )NULL, //传递给任务函数的参数
-										(UBaseType_t)2, //任务优先级
-										(TaskHandle_t*)&LED1_Task_Handle );//任务控制块指针
-	if (pdPASS == xReturn) /* 创建成功 */
-		printf("LED1_Task 任务创建成功!\n");
-	else
-		printf("LED1_Task 任务创建失败!\n");
-	/* 创建 LED1_Task 任务 */
-	xReturn = xTaskCreate( (TaskFunction_t )LED2_Task, //任务函数
-										(const char*)"LED2_Task",//任务名称
-										(uint16_t)512, //任务堆栈大小
-										(void* )NULL, //传递给任务函数的参数
-										(UBaseType_t)3, //任务优先级
-										(TaskHandle_t*)&LED2_Task_Handle );//任务控制块指针
+	/* 创建 BinarySem */
+	BinarySem_Handle = xSemaphoreCreateBinary();
+	if (NULL != BinarySem_Handle)
+		printf("BinarySem_Handle Binary Semaphoresr Create Success\r\n");
+
+	/* 创建 CountSem */
+	CountSem_Handle = xSemaphoreCreateCounting(5,5);
+	if (NULL != CountSem_Handle)
+		printf("CountSem_Handle Count Semaphores\r\n");
+//	/* 创建 LED1_Task 任务 */
+//	xReturn = xTaskCreate( (TaskFunction_t )LED1_Task, //任务函数
+//										(const char*)"LED1_Task",//任务名称
+//										(uint16_t)512, //任务堆栈大小
+//										(void* )NULL, //传递给任务函数的参数
+//										(UBaseType_t)2, //任务优先级
+//										(TaskHandle_t*)&LED1_Task_Handle );//任务控制块指针
+//	if (pdPASS == xReturn) /* 创建成功 */
+//		printf("Create LED1_Task Task Success\n");
+//	else
+//		printf("Create LED1_Task Task Fail\n");
+//	/* 创建 LED2_Task 任务 */
+//	xReturn = xTaskCreate( (TaskFunction_t )LED2_Task, //任务函数
+//										(const char*)"LED2_Task",//任务名称
+//										(uint16_t)512, //任务堆栈大小
+//										(void* )NULL, //传递给任务函数的参数
+//										(UBaseType_t)3, //任务优先级
+//										(TaskHandle_t*)&LED2_Task_Handle );//任务控制块指针
 
 //	if (pdPASS == xReturn) /* 创建成功 */
-//		printf("LED2_Task 任务创建成功!\n");
+//		printf("Create LED2_Task Task Success\n");
 //	else
-//		printf("LED2_Task 任务创建失败!\n");
+//		printf("Create LED2_Task Task Fail\n");
 //		/* 创建 LED1_Task 任务 */
 //	xReturn = xTaskCreate( (TaskFunction_t )KEY_Task, //任务函数
 //										(const char*)"KEY_Task",//任务名称
@@ -218,28 +335,47 @@ static void AppTaskCreate( void )
 //										(TaskHandle_t*)&KEY_Task_Handle );//任务控制块指针
 //
 //	if (pdPASS == xReturn) /* 创建成功 */
-//		printf("KEY_Task 任务创建成功!\n");
+//		printf("Create KEY_Task Task Success\n");
 //	else
-//		printf("KEY_Task 任务创建失败!\n");
+//		printf("Create KEY_Task Task Fail\n");
 	/* 创建 Receive_Task 任务 */
-	xReturn = xTaskCreate((TaskFunction_t )Receive_Task,/* 任务入口函数 */
-						 (const char* )"Receive_Task",/* 任务名字 */
-						 (uint16_t )512, /* 任务栈大小 */
-						 (void* )NULL, /* 任务入口函数参数 */
-						 (UBaseType_t )2, /* 任务的优先级 */
-						 (TaskHandle_t* )&Receive_Task_Handle);/*任务控制块指针*/
-	if (pdPASS == xReturn)
-		printf("创建 Receive_Task 任务成功!\r\n");
+//	xReturn = xTaskCreate((TaskFunction_t )Receive_Task,/* 任务入口函数 */
+//						 (const char* )"Receive_Task",/* 任务名字 */
+//						 (uint16_t )512, /* 任务栈大小 */
+//						 (void* )NULL, /* 任务入口函数参数 */
+//						 (UBaseType_t )2, /* 任务的优先级 */
+//						 (TaskHandle_t* )&Receive_Task_Handle);/*任务控制块指针*/
+//	if (pdPASS == xReturn)
+//		printf("Create Receive_Task Task Success\r\n");
 
-	/* 创建 Send_Task 任务 */
-	xReturn = xTaskCreate((TaskFunction_t )Send_Task, /* 任务入口函数 */
-						 (const char* )"Send_Task",/* 任务名字 */
-						 (uint16_t )512, /* 任务栈大小 */
-						 (void* )NULL,/* 任务入口函数参数 */
-						 (UBaseType_t )3, /* 任务的优先级 */
-						 (TaskHandle_t* )&Send_Task_Handle);/*任务控制块指针 */
+//	/* 创建 Send_Task 任务 */
+//	xReturn = xTaskCreate((TaskFunction_t )Send_Task, /* 任务入口函数 */
+//						 (const char* )"Send_Task",/* 任务名字 */
+//						 (uint16_t )512, /* 任务栈大小 */
+//						 (void* )NULL,/* 任务入口函数参数 */
+//						 (UBaseType_t )3, /* 任务的优先级 */
+//						 (TaskHandle_t* )&Send_Task_Handle);/*任务控制块指针 */
+//	if (pdPASS == xReturn)
+//		printf("Create Send_Task Task Success\n\n");
+//	
+	/* 创建 Take_Task 任务 */
+	xReturn = xTaskCreate((TaskFunction_t )Take_Task, /* 任务入口函数 */
+							(const char* )"Take_Task",/* 任务名字 */
+							(uint16_t )512, /* 任务栈大小 */
+							(void* )NULL, /* 任务入口函数参数 */
+							(UBaseType_t )2, /* 任务的优先级 */
+							(TaskHandle_t* )&Take_Task_Handle);/* 任务控制块指针 */
 	if (pdPASS == xReturn)
-		printf("创建 Send_Task 任务成功!\n\n");
+		printf("Create Take_Task Task Success\r\n");
+	/* 创建 Give_Task 任务 */
+	xReturn = xTaskCreate((TaskFunction_t )Give_Task, /* 任务入口函数 */
+							(const char* )"Give_Task",/* 任务名字 */
+							(uint16_t )512, /* 任务栈大小 */
+							(void* )NULL,/* 任务入口函数参数 */
+							(UBaseType_t )3, /* 任务的优先级 */
+							(TaskHandle_t* )&Give_Task_Handle);/* 任务控制块指针 */
+	if (pdPASS == xReturn)
+		printf("Create Give_Task Task Success\n\n");
 
 	vTaskDelete(AppTaskCreate_Handle); //删除 AppTaskCreate 任务
 	taskEXIT_CRITICAL(); //退出临界区
