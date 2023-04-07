@@ -13,6 +13,9 @@
 static void AppTaskCreate(void);/* 用于创建任务 */
 static void LED1_Task(void* pvParameters);/* LED1_Task 任务实现 */
 static void System_Init(void);/* 用于初始化板载相关资源 */
+static void LowPriority_Task(void* pvParameters);/* LowPriority_Task 任务实现 */
+static void MidPriority_Task(void* pvParameters);/* MidPriority_Task 任务实现 */
+static void HighPriority_Task(void* pvParameters);/* MidPriority_Task 任务实现 */
 
 /**************************** 任务句柄 ********************************/
 /*
@@ -36,6 +39,13 @@ static TaskHandle_t Send_Task_Handle;
 static TaskHandle_t Take_Task_Handle = NULL;
 /* Give_Task 任务句柄 */
 static TaskHandle_t Give_Task_Handle = NULL;
+/* LowPriority_Task 任务句柄 */
+static TaskHandle_t LowPriority_Task_Handle = NULL;
+/* MidPriority_Task 任务句柄 */
+static TaskHandle_t MidPriority_Task_Handle = NULL;
+/* HighPriority_Task 任务句柄 */
+static TaskHandle_t HighPriority_Task_Handle = NULL;
+
 /***************************** 内核对象句柄 *****************************/
 /*
 * 信号量，消息队列，事件标志组，软件定时器这些都属于内核的对象，要想使用这些内核FreeRTOS内核实现与应用开发实战指南
@@ -50,7 +60,7 @@ static TaskHandle_t Give_Task_Handle = NULL;
 QueueHandle_t Test_Queue =NULL;
 SemaphoreHandle_t BinarySem_Handle =NULL;
 SemaphoreHandle_t CountSem_Handle =NULL;
-
+SemaphoreHandle_t MuxSem_Handle = NULL;//互斥信号量
 /*************************** 全局变量声明 *******************************/
 /*
 * 当我们在写应用程序的时候，可能需要用到一些全局变量。
@@ -278,6 +288,70 @@ static void Give_Task(void* parameter)
 	}
 }
 
+static void LowPriority_Task(void* parameter)
+{
+	static uint32_t i;
+	BaseType_t xReturn = pdPASS;/* 定义一个创建信息返回值，默认为 pdPASS */
+	
+	while (1)
+	{
+		printf("LowPriority_Task get\r\n");
+		//获取二值信号量 xSemaphore,没获取到则一直等待
+		xReturn = xSemaphoreTake(BinarySem_Handle,/* 二值信号量句柄 */
+								portMAX_DELAY); /* 等待时间 */
+		if ( xReturn == pdTRUE )
+			printf("LowPriority_Task Runing\r\n");
+
+		for (i=0; i<2000000; i++)
+		{ //模拟低优先级任务占用信号量
+			taskYIELD();//发起任务调度
+		}
+		printf("LowPriority_Task Release!\r\n");
+		xReturn = xSemaphoreGive( BinarySem_Handle );//给出二值信号量
+		LED1_TOGGLE;
+		vTaskDelay(500);
+	}
+}
+
+/**********************************************************************
+* @ 函数名 ： MidPriority_Task
+* @ 功能说明： MidPriority_Task 任务主体
+* @ 参数 ：
+* @ 返回值 ： 无
+********************************************************************/
+static void MidPriority_Task(void* parameter)
+{
+	while (1)
+	{
+		printf("MidPriority_Task Runing\r\n");
+		vTaskDelay(500);
+	}
+}
+
+/**********************************************************************
+* @ 函数名 ： HighPriority_Task
+* @ 功能说明： HighPriority_Task 任务主体
+* @ 参数 ：
+* @ 返回值 ： 无
+********************************************************************/
+static void HighPriority_Task(void* parameter)
+{
+	BaseType_t xReturn = pdTRUE;/* 定义一个创建信息返回值，默认为 pdPASS */
+	
+	while (1) 
+	{
+		printf("HighPriority_Task get\r\n");
+		//获取二值信号量 xSemaphore,没获取到则一直等待
+		xReturn = xSemaphoreTake(BinarySem_Handle,/* 二值信号量句柄 */
+								portMAX_DELAY); /* 等待时间 */
+		if (pdTRUE == xReturn)
+			printf("HighPriority_Task Runing\r\n");
+		LED1_TOGGLE;
+		xReturn = xSemaphoreGive( BinarySem_Handle );//给出二值信号量
+		vTaskDelay(500);
+	}
+}
+
 /***********************************************************************
 132 * @ 函数名 ： AppTaskCreate
 133 * @ 功能说明： 为了方便管理，所有的任务创建函数都放在这个函数里面
@@ -289,17 +363,20 @@ static void AppTaskCreate( void )
 	BaseType_t xReturn = pdPASS;
 
 	taskENTER_CRITICAL(); //进入临界区
-	/* 创建 Test_Queue */
+	/* 创建 消息队列Test_Queue */
 	Test_Queue = xQueueCreate( (UBaseType_t) QUEUE_LEN, /* 消息队列的长度 */
 								(UBaseType_t) QUEUE_SIZE );/* 消息的大小 */
 	if (NULL != Test_Queue)
 		printf("Create Test_Queue Successful!\r\n");
-	/* 创建 BinarySem */
+	
+	/* 创建 二值信号量BinarySem */
 	BinarySem_Handle = xSemaphoreCreateBinary();
 	if (NULL != BinarySem_Handle)
 		printf("BinarySem_Handle Binary Semaphoresr Create Success\r\n");
-
-	/* 创建 CountSem */
+	
+	xReturn = xSemaphoreGive( BinarySem_Handle );//给出二值信号量
+	
+	/* 创建 计数信号量 CountSem */
 	CountSem_Handle = xSemaphoreCreateCounting(5,5);
 	if (NULL != CountSem_Handle)
 		printf("CountSem_Handle Count Semaphores\r\n");
@@ -358,24 +435,53 @@ static void AppTaskCreate( void )
 //	if (pdPASS == xReturn)
 //		printf("Create Send_Task Task Success\n\n");
 //	
-	/* 创建 Take_Task 任务 */
-	xReturn = xTaskCreate((TaskFunction_t )Take_Task, /* 任务入口函数 */
-							(const char* )"Take_Task",/* 任务名字 */
-							(uint16_t )512, /* 任务栈大小 */
-							(void* )NULL, /* 任务入口函数参数 */
-							(UBaseType_t )2, /* 任务的优先级 */
-							(TaskHandle_t* )&Take_Task_Handle);/* 任务控制块指针 */
+//	/* 创建 Take_Task 任务 */
+//	xReturn = xTaskCreate((TaskFunction_t )Take_Task, /* 任务入口函数 */
+//							(const char* )"Take_Task",/* 任务名字 */
+//							(uint16_t )512, /* 任务栈大小 */
+//							(void* )NULL, /* 任务入口函数参数 */
+//							(UBaseType_t )2, /* 任务的优先级 */
+//							(TaskHandle_t* )&Take_Task_Handle);/* 任务控制块指针 */
+//	if (pdPASS == xReturn)
+//		printf("Create Take_Task Task Success\r\n");
+//	/* 创建 Give_Task 任务 */
+//	xReturn = xTaskCreate((TaskFunction_t )Give_Task, /* 任务入口函数 */
+//							(const char* )"Give_Task",/* 任务名字 */
+//							(uint16_t )512, /* 任务栈大小 */
+//							(void* )NULL,/* 任务入口函数参数 */
+//							(UBaseType_t )3, /* 任务的优先级 */
+//							(TaskHandle_t* )&Give_Task_Handle);/* 任务控制块指针 */
+//	if (pdPASS == xReturn)
+//		printf("Create Give_Task Task Success\n\n");
+	/* 创建 LowPriority_Task 任务 */
+	xReturn = xTaskCreate((TaskFunction_t )LowPriority_Task, /* 任务入口函数 */
+						(const char* )"LowPriority_Task",/*任务名字 */
+						(uint16_t )512, /* 任务栈大小 */
+						(void* )NULL, /* 任务入口函数参数 */
+						(UBaseType_t )2, /* 任务的优先级 */
+						(TaskHandle_t* )&LowPriority_Task_Handle);
 	if (pdPASS == xReturn)
-		printf("Create Take_Task Task Success\r\n");
-	/* 创建 Give_Task 任务 */
-	xReturn = xTaskCreate((TaskFunction_t )Give_Task, /* 任务入口函数 */
-							(const char* )"Give_Task",/* 任务名字 */
-							(uint16_t )512, /* 任务栈大小 */
-							(void* )NULL,/* 任务入口函数参数 */
-							(UBaseType_t )3, /* 任务的优先级 */
-							(TaskHandle_t* )&Give_Task_Handle);/* 任务控制块指针 */
+		printf("Create LowPriority_Task Success!\r\n");
+
+	/* 创建 MidPriority_Task 任务 */
+	xReturn = xTaskCreate((TaskFunction_t )MidPriority_Task, /* 任务入口函数 */
+						(const char* )"MidPriority_Task",/* 任务名字 */
+						(uint16_t )512, /* 任务栈大小 */
+						(void* )NULL,/* 任务入口函数参数 */
+						(UBaseType_t )3, /* 任务的优先级 */
+						(TaskHandle_t*)&MidPriority_Task_Handle);/*任务控制块指针 */
 	if (pdPASS == xReturn)
-		printf("Create Give_Task Task Success\n\n");
+		printf("Create MidPriority_Task Success!\n");
+
+	/* 创建 HighPriority_Task 任务 */ 
+	xReturn = xTaskCreate((TaskFunction_t )HighPriority_Task, /* 任务入口函数 */
+						(const char* )"HighPriority_Task",/* 任务名字 */
+						(uint16_t )512, /* 任务栈大小 */
+						(void* )NULL,/* 任务入口函数参数 */
+						(UBaseType_t )4, /* 任务的优先级 */
+						(TaskHandle_t* )& HighPriority_Task_Handle);/*任务控制块指针 */
+	if (pdPASS == xReturn)
+		printf("Create HighPriority_Task Success!\n\n");
 
 	vTaskDelete(AppTaskCreate_Handle); //删除 AppTaskCreate 任务
 	taskEXIT_CRITICAL(); //退出临界区
