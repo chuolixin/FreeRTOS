@@ -297,7 +297,7 @@ static void LowPriority_Task(void* parameter)
 	{
 		printf("LowPriority_Task get\r\n");
 		//获取二值信号量 xSemaphore,没获取到则一直等待
-		xReturn = xSemaphoreTake(BinarySem_Handle,/* 二值信号量句柄 */
+		xReturn = xSemaphoreTake(MuxSem_Handle,/* 互斥信号量句柄 */
 								portMAX_DELAY); /* 等待时间 */
 		if ( xReturn == pdTRUE )
 			printf("LowPriority_Task Runing\r\n");
@@ -307,7 +307,7 @@ static void LowPriority_Task(void* parameter)
 			taskYIELD();//发起任务调度
 		}
 		printf("LowPriority_Task Release!\r\n");
-		xReturn = xSemaphoreGive( BinarySem_Handle );//给出二值信号量
+		xReturn = xSemaphoreGive( MuxSem_Handle );//给出互斥信号量
 		LED1_TOGGLE;
 		vTaskDelay(500);
 	}
@@ -342,12 +342,14 @@ static void HighPriority_Task(void* parameter)
 	{
 		printf("HighPriority_Task get\r\n");
 		//获取二值信号量 xSemaphore,没获取到则一直等待
-		xReturn = xSemaphoreTake(BinarySem_Handle,/* 二值信号量句柄 */
+		xReturn = xSemaphoreTake(MuxSem_Handle,/* 互斥信号量句柄 */
 								portMAX_DELAY); /* 等待时间 */
 		if (pdTRUE == xReturn)
 			printf("HighPriority_Task Runing\r\n");
 		LED1_TOGGLE;
-		xReturn = xSemaphoreGive( BinarySem_Handle );//给出二值信号量
+		
+		printf("HighPriority_Task Release\r\n");
+		xReturn = xSemaphoreGive( MuxSem_Handle );//给出互斥信号量
 		vTaskDelay(500);
 	}
 }
@@ -364,22 +366,28 @@ static void AppTaskCreate( void )
 
 	taskENTER_CRITICAL(); //进入临界区
 	/* 创建 消息队列Test_Queue */
-	Test_Queue = xQueueCreate( (UBaseType_t) QUEUE_LEN, /* 消息队列的长度 */
-								(UBaseType_t) QUEUE_SIZE );/* 消息的大小 */
-	if (NULL != Test_Queue)
-		printf("Create Test_Queue Successful!\r\n");
-	
-	/* 创建 二值信号量BinarySem */
-	BinarySem_Handle = xSemaphoreCreateBinary();
-	if (NULL != BinarySem_Handle)
-		printf("BinarySem_Handle Binary Semaphoresr Create Success\r\n");
-	
-	xReturn = xSemaphoreGive( BinarySem_Handle );//给出二值信号量
-	
-	/* 创建 计数信号量 CountSem */
-	CountSem_Handle = xSemaphoreCreateCounting(5,5);
-	if (NULL != CountSem_Handle)
-		printf("CountSem_Handle Count Semaphores\r\n");
+//	Test_Queue = xQueueCreate( (UBaseType_t) QUEUE_LEN, /* 消息队列的长度 */
+//								(UBaseType_t) QUEUE_SIZE );/* 消息的大小 */
+//	if (NULL != Test_Queue)
+//		printf("Create Test_Queue Successful!\r\n");
+//	
+//	/* 创建 二值信号量BinarySem */
+//	BinarySem_Handle = xSemaphoreCreateBinary();
+//	if (NULL != BinarySem_Handle)
+//		printf("BinarySem_Handle Binary Semaphoresr Create Success\r\n");
+//	
+//	xReturn = xSemaphoreGive( BinarySem_Handle );//给出二值信号量
+//	
+//	/* 创建 计数信号量 CountSem */
+//	CountSem_Handle = xSemaphoreCreateCounting(5,5);
+//	if (NULL != CountSem_Handle)
+//		printf("CountSem_Handle Count Semaphores\r\n");
+	/* 创建 MuxSem */
+	MuxSem_Handle = xSemaphoreCreateMutex();
+	if (NULL != MuxSem_Handle)
+		printf("MuxSem_Handle Create Mutex Success!\r\n");
+	xReturn = xSemaphoreGive( MuxSem_Handle );//给出互斥量
+
 //	/* 创建 LED1_Task 任务 */
 //	xReturn = xTaskCreate( (TaskFunction_t )LED1_Task, //任务函数
 //										(const char*)"LED1_Task",//任务名称
