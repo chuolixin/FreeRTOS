@@ -17,6 +17,8 @@ static void System_Init(void);/* 用于初始化板载相关资源 */
 static void LowPriority_Task(void* pvParameters);/* LowPriority_Task 任务实现 */
 static void MidPriority_Task(void* pvParameters);/* MidPriority_Task 任务实现 */
 static void HighPriority_Task(void* pvParameters);/* MidPriority_Task 任务实现 */
+static void Swtmr1_Callback(void* parameter);
+static void Swtmr2_Callback(void* parameter);
 
 /**************************** 任务句柄 ********************************/
 /*
@@ -67,11 +69,15 @@ SemaphoreHandle_t BinarySem_Handle = NULL;
 SemaphoreHandle_t CountSem_Handle = NULL;
 SemaphoreHandle_t MuxSem_Handle = NULL;//互斥信号量
 static EventGroupHandle_t Event_Handle = NULL;//事件标志
+static TimerHandle_t Swtmr1_Handle =NULL; /* 软件定时器句柄 */
+static TimerHandle_t Swtmr2_Handle =NULL; /* 软件定时器句柄 */
 
 /*************************** 全局变量声明 *******************************/
 /*
 * 当我们在写应用程序的时候，可能需要用到一些全局变量。
 */
+static uint32_t TmrCb_Count1 = 0; /* 记录软件定时器 1 回调函数执行次数 */
+static uint32_t TmrCb_Count2 = 0; /* 记录软件定时器 2 回调函数执行次数 */
 
 
 /*************************** 宏定义 ************************************/
@@ -424,6 +430,38 @@ static void LED_Event_Task(void* parameter)
 	}
  }
 
+static void Swtmr1_Callback(void* parameter)
+{
+	TickType_t tick_num1;
+	TmrCb_Count1++; /* 每回调一次加一 */
+
+	tick_num1 = xTaskGetTickCount(); /* 获取滴答定时器的计数值 */
+
+	LED1_TOGGLE;
+
+	printf("swtmr1_callback function count%d \n", TmrCb_Count1);
+	printf("systick data=%d\n", tick_num1);
+}
+ 
+/***********************************************************************
+* @ 函数名 ： Swtmr2_Callback
+* @ 功能说明： 软件定时器 2 回调函数，打印回调函数信息&当前系统时间
+* 软件定时器请不要调用阻塞函数，也不要进行死循环，应快进快出
+* @ 参数 ： 无
+* @ 返回值 ： 无
+********************************************************/
+static void Swtmr2_Callback(void* parameter)
+{
+	TickType_t tick_num2;
+
+	TmrCb_Count2++; /* 每回调一次加一 */
+
+	tick_num2 = xTaskGetTickCount(); /* 获取滴答定时器的计数值 */
+
+	printf("swtmr2_callback function count %d \r\n", TmrCb_Count2);
+	printf("systick data = %d\r\n", tick_num2);
+}
+
 /***********************************************************************
 * @ 函数名 ： AppTaskCreate
 * @ 功能说明： 为了方便管理，所有的任务创建函数都放在这个函数里面
@@ -457,10 +495,10 @@ static void AppTaskCreate( void )
 //	if (NULL != MuxSem_Handle)
 //		printf("MuxSem_Handle Create Mutex Success!\r\n");
 //	xReturn = xSemaphoreGive( MuxSem_Handle );//给出互斥量
-	/* 创建 Event_Handle */
-	Event_Handle = xEventGroupCreate();
-	if (NULL != Event_Handle)
-		printf("Event_Handle Create Success!\r\n");
+//	/* 创建 Event_Handle */
+//	Event_Handle = xEventGroupCreate();
+//	if (NULL != Event_Handle)
+//		printf("Event_Handle Create Success!\r\n");
 //	/* 创建 LED1_Task 任务 */
 //	xReturn = xTaskCreate( (TaskFunction_t )LED1_Task, //任务函数
 //										(const char*)"LED1_Task",//任务名称
@@ -563,26 +601,45 @@ static void AppTaskCreate( void )
 //						(TaskHandle_t* )& HighPriority_Task_Handle);/*任务控制块指针 */
 //	if (pdPASS == xReturn)
 //		printf("Create HighPriority_Task Success!\n\n");
-	/* 创建 LED_Task 任务 */
-	xReturn = xTaskCreate((TaskFunction_t )LED_Event_Task, /* 任务入口函数 */
-							(const char* )"LED_Event_Task",/* 任务名字 */
-							(uint16_t )512, /* 任务栈大小 */
-							(void* )NULL, /* 任务入口函数参数 */
-							(UBaseType_t )2, /* 任务的优先级 */
-							(TaskHandle_t* )&LED_Event_Task_Handle);/* 任务控制块指针 */
-	if (pdPASS == xReturn)
-		printf("创建 LED_Task 任务成功!\r\n");
-	
-	/* 创建 KEY_Task 任务 */
-	xReturn = xTaskCreate((TaskFunction_t )KEY_Event_Task, /* 任务入口函数 */
-							(const char* )"KEY_Event_Task",/* 任务名字 */
-							(uint16_t )512, /* 任务栈大小 */
-							(void* )NULL,/* 任务入口函数参数 */
-							(UBaseType_t )3, /* 任务的优先级 */
-							(TaskHandle_t* )&KEY_Event_Task_Handle);/* 任务控制块指针 */
-	if (pdPASS == xReturn)
-	printf("创建 KEY_Task 任务成功!\n");
+//	/* 创建 LED_Task 任务 */
+//	xReturn = xTaskCreate((TaskFunction_t )LED_Event_Task, /* 任务入口函数 */
+//							(const char* )"LED_Event_Task",/* 任务名字 */
+//							(uint16_t )512, /* 任务栈大小 */
+//							(void* )NULL, /* 任务入口函数参数 */
+//							(UBaseType_t )2, /* 任务的优先级 */
+//							(TaskHandle_t* )&LED_Event_Task_Handle);/* 任务控制块指针 */
+//	if (pdPASS == xReturn)
+//		printf("创建 LED_Task 任务成功!\r\n");
+//	
+//	/* 创建 KEY_Task 任务 */
+//	xReturn = xTaskCreate((TaskFunction_t )KEY_Event_Task, /* 任务入口函数 */
+//							(const char* )"KEY_Event_Task",/* 任务名字 */
+//							(uint16_t )512, /* 任务栈大小 */
+//							(void* )NULL,/* 任务入口函数参数 */
+//							(UBaseType_t )3, /* 任务的优先级 */
+//							(TaskHandle_t* )&KEY_Event_Task_Handle);/* 任务控制块指针 */
+//	if (pdPASS == xReturn)
+//	printf("创建 KEY_Task 任务成功!\n");
 
+	Swtmr1_Handle=xTimerCreate((const char*)"AutoReloadTimer",
+							 (TickType_t)1000,/*定时器周期 1000(tick) */
+							 (UBaseType_t)pdTRUE,/* 周期模式 */
+							 (void*)1,/*为每个计时器分配一个索引的唯一 ID */
+							 (TimerCallbackFunction_t)Swtmr1_Callback);
+	if (Swtmr1_Handle != NULL)
+	{
+		xTimerStart(Swtmr1_Handle,0); //开启周期定时器
+	}
+
+	Swtmr2_Handle=xTimerCreate((const char* )"OneShotTimer",
+								(TickType_t)5000,/*定时器周期 5000(tick) */
+								(UBaseType_t )pdFALSE,/* 单次模式 */
+								(void*)2,/*为每个计时器分配一个索引的唯一 ID */
+								(TimerCallbackFunction_t)Swtmr2_Callback);
+	if (Swtmr2_Handle != NULL)
+	{
+		xTimerStart(Swtmr2_Handle,0); //开启周期定时器
+	}
 	vTaskDelete(AppTaskCreate_Handle); //删除 AppTaskCreate 任务
 	taskEXIT_CRITICAL(); //退出临界区
 }
